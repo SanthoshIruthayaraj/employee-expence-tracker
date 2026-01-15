@@ -1,0 +1,404 @@
+<ejs-grid
+  [dataSource]="expenseManager"
+  [height]="520"
+  [toolbar]="toolbar"
+  [allowPaging]="true"
+  [allowSorting]="true"
+  [allowFiltering]="true"
+  [allowGrouping]="true"
+  [allowTextWrap]="true"
+  [pageSettings]="pageSettings"
+  [filterSettings]="filterSettings"
+  [searchSettings]="searchSettings"
+  [groupSettings]="groupSettings"
+  [editSettings]="editSettings"
+  clipMode="EllipsisWithTooltip"
+  (actionBegin)="actionBegin($event)"
+  (actionComplete)="actionComplete($event)"
+>
+  <e-columns>
+    <e-column
+      field="expenseId"
+      headerText="Expense ID"
+      width="130"
+      textAlign="Center"
+      isPrimaryKey="true"
+    ></e-column>
+
+    <e-column field="employeeName" headerText="Employee" width="250">
+      <ng-template #template let-data>
+        <div class="employee-cell">
+          <img [src]="data.employeeAvatarUrl" [alt]="data.employeeName" />
+          <div>
+            <div class="name">{{ data.employeeName }}</div>
+            <div class="email">{{ data.employeeEmail }}</div>
+          </div>
+        </div>
+      </ng-template>
+    </e-column>
+
+    <e-column field="department" headerText="Department" width="150"></e-column>
+
+    <e-column
+      field="category"
+      headerText="Category"
+      width="160"
+      [filter]="checkboxFilter"
+    ></e-column>
+
+    <e-column
+      field="currency"
+      headerText="Currency"
+      width="150"
+      [filter]="checkboxFilter"
+    ></e-column>
+
+    <e-column
+      field="amount"
+      headerText="Amount"
+      width="130"
+      textAlign="Right"
+      [filter]="menuFilter"
+    >
+      <ng-template #template let-data>
+        {{ formatCurrency(data.amount, data.currency) }}
+      </ng-template>
+    </e-column>
+
+    <e-column
+      field="taxPct"
+      headerText="Tax %"
+      width="110"
+      textAlign="Right"
+      format="P2"
+      [filter]="menuFilter"
+    ></e-column>
+
+    <e-column
+      field="totalAmount"
+      headerText="Total (Incl. Tax)"
+      width="160"
+      textAlign="Right"
+      allowEditing="false"
+      [filter]="menuFilter"
+    >
+      <ng-template #template let-data>
+        {{ formatCurrency(data.totalAmount, data.currency) }}
+      </ng-template>
+    </e-column>
+
+    <e-column
+      field="reimbursementStatus"
+      headerText="Status"
+      width="140"
+      textAlign="Center"
+      [filter]="checkboxFilter"
+    >
+      <ng-template #template let-data>
+        <span
+          class="status-pill"
+          [style.background]="statusBadges[data.reimbursementStatus]?.color"
+        >
+          {{ data.reimbursementStatus }}
+        </span>
+      </ng-template>
+    </e-column>
+
+    <e-column field="tags" headerText="Tags" width="220">
+      <ng-template #template let-data>
+        <span *ngIf="data.tags?.length; else noTags">
+          <span class="tag-pill" *ngFor="let tag of data.tags">{{ tag }}</span>
+        </span>
+        <ng-template #noTags>--</ng-template>
+      </ng-template>
+    </e-column>
+
+    <e-column
+      field="ExpenseDate"
+      headerText="Expense Date"
+      width="150"
+      type="date"
+      format="yMd"
+      textAlign="Center"
+      [filter]="menuFilter"
+    ></e-column>
+
+    <e-column
+      field="paymentMethod"
+      headerText="Payment Method"
+      width="170"
+      [filter]="checkboxFilter"
+    ></e-column>
+
+    <e-column
+      field="isPolicyCompliant"
+      headerText="Under Policy"
+      width="120"
+      type="boolean"
+      displayAsCheckBox="true"
+      textAlign="Center"
+      [filter]="checkboxFilter"
+    >
+      <ng-template #filterItemTemplate let-data>
+        {{ data.isPolicyCompliant ? "Under Policy" : "Not Under Policy" }}
+      </ng-template>
+    </e-column>
+
+    <e-column
+      field="description"
+      headerText="Description"
+      width="240"
+      clipMode="EllipsisWithTooltip"
+    ></e-column>
+  </e-columns>
+
+  <ng-template #groupSettingsCaptionTemplate let-data>
+    <ng-container
+      *ngIf="data.field === 'isPolicyCompliant'; else defaultCaption"
+    >
+      <div
+        class="policy-group-caption"
+        [ngClass]="data.key ? 'policy-yes' : 'policy-no'"
+      >
+        <span class="label">
+          {{ data.key ? "Under Policy" : "Not Under Policy" }}
+        </span>
+        <span class="count">
+          — {{ data.count }} item{{ data.count === 1 ? "" : "s" }}
+        </span>
+      </div>
+    </ng-container>
+
+    <ng-template #defaultCaption>
+      <span class="groupItems">
+        {{ data.headerText }} - {{ data.key }} : {{ data.count }} item{{
+          data.count === 1 ? "" : "s"
+        }}
+      </span>
+    </ng-template>
+  </ng-template>
+
+  <ng-template #editSettingsTemplate let-data>
+    <form #expenseForm="ngForm" class="expense-form">
+      <!-- Section: Employee -->
+      <div class="form-section">
+        <h4>Employee</h4>
+
+        <div class="employee-layout">
+          <div class="id-name-column">
+            <div class="form-item">
+              <ejs-textbox
+                id="expenseId"
+                name="expenseId"
+                [(ngModel)]="expenseData.expenseId"
+                [readonly]="!!data.expenseId"
+                placeholder="Expense ID"
+                floatLabelType="Auto"
+              ></ejs-textbox>
+            </div>
+
+            <div class="form-item">
+              <ejs-textbox
+                id="employeeName"
+                name="employeeName"
+                [(ngModel)]="expenseData.employeeName"
+                placeholder="Employee Name"
+                floatLabelType="Auto"
+              ></ejs-textbox>
+            </div>
+          </div>
+
+          <div class="form-item avatar-item">
+            <label class="form-label">Employee Avatar</label>
+            <div class="avatar-slot">
+              <ng-container *ngIf="avatarPreview; else avatarUploaderTpl">
+                <div class="avatar-inline-preview">
+                  <img [src]="avatarPreview" alt="Avatar preview" />
+                  <button
+                    type="button"
+                    class="clear-avatar-btn"
+                    aria-label="Clear avatar"
+                    (click)="clearAvatar()"
+                  >
+                    &times;
+                  </button>
+                </div>
+              </ng-container>
+
+              <ng-template #avatarUploaderTpl>
+                <div class="avatar-dropzone">
+                  <ejs-uploader
+                    id="employeeAvatar"
+                    name="employeeAvatar"
+                    cssClass="avatar-uploader"
+                    [autoUpload]="false"
+                    accept="image/*"
+                    allowedExtensions=".png,.jpg,.jpeg,.gif"
+                    (selected)="onAvatarSelected($event)"
+                  ></ejs-uploader>
+                </div>
+              </ng-template>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-item email-row">
+          <ejs-textbox
+            type="email"
+            id="employeeEmail"
+            name="employeeEmail"
+            [(ngModel)]="expenseData.employeeEmail"
+            placeholder="Email"
+            floatLabelType="Auto"
+          ></ejs-textbox>
+        </div>
+      </div>
+
+      <!-- Section: Expense -->
+      <div class="form-section">
+        <h4>Expense</h4>
+        <div class="form-grid">
+          <div class="form-item">
+            <ejs-dropdownlist
+              id="department"
+              name="department"
+              [(ngModel)]="expenseData.department"
+              [dataSource]="departmentOptions"
+              placeholder="Department"
+              [allowFiltering]="true"
+              floatLabelType="Auto"
+            ></ejs-dropdownlist>
+          </div>
+
+          <div class="form-item">
+            <ejs-dropdownlist
+              id="category"
+              name="category"
+              [(ngModel)]="expenseData.category"
+              [dataSource]="categoryOptions"
+              placeholder="Category"
+              [allowFiltering]="true"
+              floatLabelType="Auto"
+            ></ejs-dropdownlist>
+          </div>
+
+          <div class="form-item">
+            <ejs-numerictextbox
+              id="amount"
+              name="amount"
+              [(ngModel)]="expenseData.amount"
+              [min]="0"
+              [step]="0.01"
+              format="n2"
+              placeholder="Amount"
+              floatLabelType="Auto"
+            ></ejs-numerictextbox>
+          </div>
+
+          <div class="form-item">
+            <ejs-numerictextbox
+              id="taxPct"
+              name="taxPct"
+              [(ngModel)]="expenseData.taxPct"
+              [min]="0"
+              [step]="0.01"
+              format="p2"
+              placeholder="Tax %"
+              floatLabelType="Auto"
+            ></ejs-numerictextbox>
+          </div>
+
+          <div class="form-item">
+            <ejs-datepicker
+              id="ExpenseDate"
+              name="ExpenseDate"
+              [(ngModel)]="expenseData.ExpenseDate"
+              format="MM/dd/yyyy"
+              placeholder="Expense Date"
+              floatLabelType="Auto"
+            ></ejs-datepicker>
+          </div>
+
+          <div class="form-item">
+            <ejs-dropdownlist
+              id="currency"
+              name="currency"
+              [(ngModel)]="expenseData.currency"
+              [dataSource]="currencyOptions"
+              placeholder="Currency"
+              [allowFiltering]="true"
+              floatLabelType="Auto"
+            ></ejs-dropdownlist>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Payment & Status -->
+      <div class="form-section">
+        <h4>Payment & Status</h4>
+        <div class="form-grid">
+          <div class="form-item">
+            <ejs-dropdownlist
+              id="paymentMethod"
+              name="paymentMethod"
+              [(ngModel)]="expenseData.paymentMethod"
+              [dataSource]="paymentOptions"
+              placeholder="Payment Method"
+              [allowFiltering]="true"
+              floatLabelType="Auto"
+            ></ejs-dropdownlist>
+          </div>
+
+          <div class="form-item">
+            <ejs-dropdownlist
+              id="reimbursementStatus"
+              name="reimbursementStatus"
+              [(ngModel)]="expenseData.reimbursementStatus"
+              [dataSource]="statusOptions"
+              placeholder="Status"
+              [allowFiltering]="true"
+              floatLabelType="Auto"
+            ></ejs-dropdownlist>
+          </div>
+
+          <div class="form-item span-2">
+            <ejs-multiselect
+              id="tags"
+              name="tags"
+              [(ngModel)]="expenseData.tags"
+              [dataSource]="tagOptions"
+              mode="Box"
+              placeholder="Tags"
+              [allowFiltering]="true"
+              floatLabelType="Auto"
+            ></ejs-multiselect>
+          </div>
+
+          <div class="form-item policy-item">
+            <ejs-checkbox
+              id="isPolicyCompliant"
+              name="isPolicyCompliant"
+              label="Under Policy"
+              [(ngModel)]="expenseData.isPolicyCompliant"
+            ></ejs-checkbox>
+          </div>
+        </div>
+      </div>
+
+      <!-- Section: Description -->
+      <div class="form-section">
+        <h4>Description</h4>
+        <div class="form-item span-2">
+          <ejs-textbox
+            id="description"
+            name="description"
+            [(ngModel)]="expenseData.description"
+            [multiline]="true"
+            rows="3"
+            placeholder="Describe your expense"
+          ></ejs-textbox>
+        </div>
+      </div>
+    </form>
+  </ng-template>
+</ejs-grid>
