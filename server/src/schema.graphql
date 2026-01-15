@@ -60,6 +60,7 @@ input DataManager {
   sorted: [SortInput!]
   filtered: [FilterInput!]
   where: JSON
+  search: String
   params: JSON
 }
 

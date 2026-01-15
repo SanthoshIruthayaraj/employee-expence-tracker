@@ -93,7 +93,6 @@ export class AppComponent {
       "department",
       "category",
       "paymentMethod",
-      "reimbursementStatus",
       "tags",
     ],
   };
