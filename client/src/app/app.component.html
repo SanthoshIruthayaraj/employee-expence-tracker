@@ -1,6 +1,6 @@
 <ejs-grid
   [dataSource]="expenseManager"
-  [height]="520"
+  [height]="500"
   [toolbar]="toolbar"
   [allowPaging]="true"
   [allowSorting]="true"
@@ -37,7 +37,7 @@
       </ng-template>
     </e-column>
 
-    <e-column field="department" headerText="Department" width="150"></e-column>
+    <e-column field="department" headerText="Department" width="150" [filter]="checkboxFilter"></e-column>
 
     <e-column
       field="category"
@@ -137,7 +137,7 @@
       type="boolean"
       displayAsCheckBox="true"
       textAlign="Center"
-      [filter]="checkboxFilter"
+      [filter]="checkboxFilterWithItemTemplate"
     >
       <ng-template #filterItemTemplate let-data>
         {{ data.isPolicyCompliant ? "Under Policy" : "Not Under Policy" }}

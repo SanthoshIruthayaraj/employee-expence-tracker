@@ -84,6 +84,7 @@ export class AppComponent {
   public filterSettings = { type: "Excel" };
   public menuFilter = { type: "Menu" };
   public checkboxFilter = { type: "CheckBox" };
+  public checkboxFilterWithItemTemplate = { type: "CheckBox" };
 
   public searchSettings = {
     fields: [
@@ -168,7 +169,8 @@ export class AppComponent {
 
   constructor() {
     this.expenseManager = new DataManager({
-      url: "http://localhost:4000/",
+      crossDomain: true,
+      url: "https://m4dqwl0h-4000.inc1.devtunnels.ms/",
       adaptor: new GraphQLAdaptor({
         response: {
           result: "expenses.result",
