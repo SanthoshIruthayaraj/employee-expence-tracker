@@ -170,7 +170,7 @@ export class AppComponent {
   constructor() {
     this.expenseManager = new DataManager({
       crossDomain: true,
-      url: "https://m4dqwl0h-4000.inc1.devtunnels.ms/",
+      url: "http://localhost:4000/",
       adaptor: new GraphQLAdaptor({
         response: {
           result: "expenses.result",
