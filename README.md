@@ -1,6 +1,6 @@
 # Syncfusion Angular Grid with GraphQL Integration using Apollo-client
 
-This sample demonstrates integrating **Syncfusion Angular Grid** with a **GraphQL backend** using **Syncfusion DataManager + `GraphQLAdaptor`**.
+This sample demonstrates integrating **Syncfusion Angular Grid** with a **GraphQL backend** using **Syncfusion DataManager + GraphQLAdaptor**.
 
 The grid uses server-driven operations (paging, sorting, filtering, search) and CRUD (add / edit / delete) through GraphQL queries & mutations.
 
@@ -544,7 +544,7 @@ export class ExpenseGridComponent {
 
 ---
 
-## 🔎 Quick Reference
+## Quick Reference
 
 | Operation | **Required Response Format** | **Purpose / Importance** |
 |---|---|---|
