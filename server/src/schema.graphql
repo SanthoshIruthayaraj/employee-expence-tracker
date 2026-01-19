@@ -1,13 +1,5 @@
 scalar JSON
 
-type Employee {
-  id: ID!
-  name: String!
-  email: String!
-  avatarUrl: String!
-  category: String!
-}
-
 type Expense {
   expenseId: ID!
   employeeName: String!

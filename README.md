@@ -1,407 +1,573 @@
-# Employee Expense Tracker
+# Syncfusion Angular Grid with GraphQL Integration using Apollo-client
 
 This sample demonstrates integrating **Syncfusion Angular Grid** with a **GraphQL backend** using **Syncfusion DataManager + `GraphQLAdaptor`**.
 
 The grid uses server-driven operations (paging, sorting, filtering, search) and CRUD (add / edit / delete) through GraphQL queries & mutations.
 
-## Architecture
+## Introduction
 
-**Client (Angular)**
+This comprehensive guide explains how to integrate the **Syncfusion EJ2 Angular Grid** with a **GraphQL backend** using the official **GraphQLAdaptor**.
 
-- Renders a Syncfusion `ejs-grid`.
-- Uses `DataManager` (from `@syncfusion/ej2-data`) as the grid `dataSource`.
-- Uses `GraphQLAdaptor` to translate grid operations into GraphQL requests.
+The key to success in this integration lies in one fundamental rule:
 
-**Server (Node.js + TypeScript)**
+**The server must always return exactly this structure for every data read request:**
 
-- Apollo Server that exposes a GraphQL schema.
-- A single `expenses(datamanager: DataManager)` query returns `{ result, count }`.
-- Mutations handle add / update / delete.
-- Applies sorting/filtering/search/paging using Syncfusion `DataManager` + `Query` on the server.
+```json
+{
+  "expenses": {
+    "result": [
+      /* only the records visible on the current page */
+    ],
+    "count": 487
+  }
+}
+```
 
-High-level flow:
+- **result** → contains only the current page of records (e.g. 10, 15 or 20 rows depending on page size)
+- **count** → contains the total number of matching records after all filters, sorts and searches (before any paging is applied)
+  This pattern is what enables true on-demand loading (server-side paging), allowing the grid to handle thousands or even millions of rows efficiently.
 
-1. Grid triggers data actions (initial load, paging, sorting, filtering, search).
-2. `GraphQLAdaptor` creates a GraphQL request with a `datamanager` variable.
-3. Server resolves `Query.expenses(datamanager)` and returns `{ result, count }`.
-4. Grid renders rows and uses `count` for paging.
+## What is GraphQL?
 
-## Prerequisites
+GraphQL is a modern query language for APIs that gives clients exactly the data they request — nothing more, nothing less.
 
-- Node.js (LTS recommended)
-- npm (or your preferred package manager)
-- Angular CLI (`npm i -g @angular/cli`)
-- A Syncfusion license key (or a valid trial)
+### Main advantages:
 
-> Note: Uses Angular standalone bootstrapping (`bootstrapApplication`) and Syncfusion EJ2 packages.
+- Single endpoint for all operations
+- typed schema
+- over-fetching or under-fetching
+- Ideal for dynamic UIs like data grids
 
-## Create the server from scratch
+In this project, GraphQL handles both data retrieval (queries) and modifications (mutations) while processing complex grid states sent by the adaptor.
 
-This section explains how to build a minimal Node/TypeScript GraphQL server that supports Syncfusion `GraphQLAdaptor`.
+## What is Syncfusion Angular Grid?
 
-### 1) Scaffold a Node + TypeScript project
+The **Syncfusion Angular Grid** (also called EJ2 Grid or ejs-grid) is a high-performance, feature-rich data table component for Angular applications.
+
+### Key built-in features:
+
+- Paging & virtual scrolling
+- Multi-column sorting
+- Excel-style filtering
+- Global & column search
+- Grouping
+- Dialog (CRUD)
+
+It uses DataManager + adaptors to communicate with any backend — in this case, GraphQLAdaptor connects it seamlessly to GraphQL.
+
+## How GraphQLAdaptor Enables Server-Side On-Demand Loading
+
+**GraphQLAdaptor** translates all grid actions (page change, sort, filter, search, etc.) into a special DataManager variable that is sent to your GraphQL server.
+
+### How on-demand loading actually works:
+
+1. The grid needs to display page 1 (first 15 rows) → sends query with skip: 0, take: 15
+
+2. Server:
+   - Applies all filters, sorts, searches
+   - Finds there are 487 matching records in total
+   - Returns only the requested slice (rows 1–15)
+3. Response structure:
+
+   ```JSON
+   {
+   	"expenses": {
+   		"result": [ /* exactly 15 expense records */ ],
+   		"count": 487
+   	}
+   }
+   ```
+
+4. Grid:
+   - Renders the 15 rows
+   - Builds pager showing "1–15 of 487" (33 pages total)
+5. When user goes to page 4: → new request with skip: 45, take: 15 → server returns different 15 rows + same count 487
+
+This mechanism is called on-demand loading, server-side paging, or virtual paging. The browser never receives the entire dataset, only what's needed right now → excellent performance even with very large data.
+
+### Core rule:
+
+result = data for current screen/viewport only count = total number of records after filtering/sorting (never equals result.length!)
+
+## Application Overview – Employee Expense Tracker
+
+**Goal** Build a modern, responsive expense management interface with excellent performance on large datasets.
+
+### Main Features
+
+- True server-side paging, sorting, filtering & search
+- Dialog-based CRUD operations (Add, Edit, Delete)
+- Optimized for thousands to millions of records
+  Sample Fields
+- expenseId
+- employeeName
+- amount
+- category
+- date
+
+---
+
+### Prerequisites
+
+- Node.js ≥ 20.x LTS
+- Angular CLI ≥ 18 (standalone components recommended)
+- Valid Syncfusion license key (trial or commercial)
+- Basic understanding of GraphQL schema & resolvers
+- Terminal / command line familiarity
+
+## Project Structure
+
+```text
+expense-tracker/
+├── server/							# GraphQL Backend
+│   ├── src/
+│   │   ├── schema.graphql
+│   │   ├── resolvers.ts
+│   │   ├── server.ts
+│   │   └── data.ts
+│   ├── tsconfig.json
+│   └── package.json
+│
+└── client/							# Angular Frontend
+    ├── src/
+    │   ├── app/
+    │   │   ├── app.component.ts
+    │   │   └── app.component.html
+    │   ├── styles.css				# Syncfusion theme imports
+    │   └── main.ts					# license registration
+    ├── angular.json
+    └── package.json
+```
+
+## Step-by-Step Server Setup (GraphQL Backend)
+
+(Detailed code for schema, resolvers, and server startup can be found in the full implementation guide or Syncfusion/Apollo official documentation)
+
+### Critical requirement:
+
+Every expenses query must return:
+
+```graphql
+type ExpenseResult {
+  result: [Expense!]!
+  count: Int!
+}
+```
+
+### 1. Create Server Folder:
 
 ```bash
 mkdir server
 cd server
 npm init -y
+```
 
+### 2. Install Dependencies:
+
+```bash
 npm install graphql @apollo/server @graphql-tools/schema graphql-type-json @syncfusion/ej2-data
-npm install -D typescript ts-node
+npm install -D typescript ts-node @types/node
 ```
 
-Create a `tsconfig.json` (uses NodeNext modules):
+### 3. Configure TypeScript (tsconfig.json):
 
-```jsonc
+```JSON
 {
-	"compilerOptions": {
-		"target": "ES2020",
-		"module": "NodeNext",
-		"moduleResolution": "NodeNext",
-		"lib": ["ES2020"],
-		"resolveJsonModule": true,
-		"esModuleInterop": true,
-		"forceConsistentCasingInFileNames": true,
-		"skipLibCheck": true,
-		"strict": true,
-		"rootDir": "src",
-		"outDir": "dist"
-	},
-	"include": ["src"]
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2020"],
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "include": ["src"]
 }
 ```
 
-Add scripts to `package.json`:
+### 4. Update package.json Scripts:
 
-```jsonc
+```JSON
 {
-	"scripts": {
-		"start": "ts-node src/server.ts",
-		"build": "tsc",
-		"start:prod": "node dist/server.js"
-	}
+  "scripts": {
+    "start": "ts-node src/server.ts"
+  }
 }
 ```
 
-### 2) Define the GraphQL schema
-
-Create `src/schema.graphql`.
-
-Key idea: the grid sends a **DataManager state** (skip/take/sort/filter/etc). Your schema must accept it, and your resolver must return the shape that the client maps in `GraphQLAdaptor.response`.
-
-Use the following schema shape:
-
-- `Query.expenses(datamanager: DataManager): ExpenseResult!`
-- `ExpenseResult` with `result` (rows) and `count` (total rows)
-- Mutations for `addExpense`, `updateExpense`, `deleteExpense`
-
-Example (snippet from the schema used here):
+### 5. Define Schema (src/schema.graphql):
 
 ```graphql
+scalar JSON
+
+type Expense {
+  expenseId: ID!
+  employeeName: String!
+  employeeEmail: String!
+  employeeAvatarUrl: String
+  department: String!
+  category: String!
+  description: String
+  receiptUrl: String
+  amount: Float!
+  taxPct: Float!
+  totalAmount: Float!
+  ExpenseDate: String!
+  paymentMethod: String!
+  currency: String!
+  reimbursementStatus: String!
+  isPolicyCompliant: Boolean!
+  tags: [String!]!
+}
+
+type ExpenseResult {
+  result: [Expense!]!
+  count: Int!
+}
+
+input ExpenseInput {
+  expenseId: ID
+  employeeName: String
+  employeeEmail: String
+  employeeAvatarUrl: String
+  department: String
+  category: String
+  description: String
+  receiptUrl: String
+  amount: Float
+  taxPct: Float
+  totalAmount: Float
+  ExpenseDate: String
+  paymentMethod: String
+  currency: String
+  reimbursementStatus: String
+  isPolicyCompliant: Boolean
+  tags: [String!]
+}
+
+input DataManager {
+  skip: Int
+  take: Int
+  requiresCounts: Boolean
+  sorted: [SortInput!]
+  filtered: [FilterInput!]
+  where: JSON
+  search: String
+  params: JSON
+}
+
+input SortInput {
+  name: String!
+  direction: String!
+}
+
+input FilterInput {
+  field: String!
+  operator: String!
+  value: String
+  predicate: String
+  matchCase: Boolean
+}
+
 type Query {
-	expenses(datamanager: DataManager): ExpenseResult!
+  expenses(datamanager: DataManager): ExpenseResult!
 }
 
 type Mutation {
-	addExpense(value: ExpenseInput!): Expense!
-	updateExpense(key: ID!, keyColumn: String, value: ExpenseInput!): Expense!
-	deleteExpense(key: ID!, keyColumn: String, value: ExpenseInput): Boolean!
+  addExpense(value: ExpenseInput!): Expense!
+  updateExpense(key: ID!, keyColumn: String, value: ExpenseInput!): Expense!
+  deleteExpense(key: ID!, keyColumn: String, value: ExpenseInput): Boolean!
 }
 ```
 
-### 3) Implement resolvers
-
-Create `src/resolvers.ts`.
-
-Implement these server-side behaviors:
-
-- **Filtering**: translates complex `where` payload into Syncfusion `Predicate` and applies it.
-- **Sorting**: applies multi-column sorting based on `sorted`.
-- **Search**: optionally applies `query.search(...)` if a search payload is provided.
-- **Paging**: uses `skip/take` to page results.
-
-Reuse `@syncfusion/ej2-data` server-side to keep query semantics aligned with the grid.
-
-Example (resolver snippet used here):
+### 6. Implement Resolvers (src/resolvers.ts):
 
 ```ts
+import {
+  DataManager as SfDataManager,
+  Query as SfQuery,
+} from "@syncfusion/ej2-data";
+
+// Sample in-memory data (replace with DB)
+let expenses: any[] = [
+  {
+    expenseId: "1",
+    employeeName: "John",
+    amount: 100,
+    category: "Travel",
+    date: "2026-01-01",
+  },
+];
+
 export const resolvers = {
-	Query: {
-		expenses: (_: unknown, { datamanager }: any) => {
-			let data: ExpenseRecord[] = [...expenses];
-			const query = new SfQuery();
+  Query: {
+    expenses: (_, { datamanager }) => {
+      let data = [...expenses];
+      const query = new SfQuery();
 
-			performFiltering(query, datamanager);
-			performSearching(query, datamanager);
-			performSorting(query, datamanager);
+      // Apply filtering, sorting, searching (implement details)
 
-			data = new DataManager(data).executeLocal(query) as ExpenseRecord[];
-			const count = data.length;
-			data = performPaging(data, datamanager);
-
-			return { result: data, count };
-		}
-	},
-	Mutation: {
-		addExpense: (_: unknown, { value }: any) => addExpense(normalizeExpenseInput(value)),
-		updateExpense: (_: unknown, { key, value }: any) => updateExpense(key, normalizeExpenseInput(value)),
-		deleteExpense: (_: unknown, { key }: any) => removeExpense(key)
-	}
+      data = new SfDataManager(data).executeLocal(query) as any[];
+      const count = data.length;
+      data = data.slice(
+        datamanager.skip || 0,
+        (datamanager.skip || 0) + (datamanager.take || data.length),
+      );
+      return { result: data, count };
+    },
+  },
+  Mutation: {
+    addExpense: (_: unknown, { value }: any) => {
+      const normalized = normalizeExpenseInput(value);
+      return addExpense(normalized as ExpenseInput);
+    },
+    updateExpense: (_: unknown, { key, value }: any) => {
+      const existing = expenses.find((item) => item.expenseId === key);
+      if (!existing) throw new Error("Expense not found");
+      const normalized = normalizeExpenseInput(value, existing);
+      return updateExpense(key, normalized) as ExpenseRecord;
+    },
+    deleteExpense: (_: unknown, { key }: any) => removeExpense(key),
+  },
 };
 ```
+### 7. Apollo Server (src/server.ts):
+```ts
+import { ApolloServer } from '@apollo/server';
+import { startStandaloneServer } from '@apollo/server/standalone';
+import { makeExecutableSchema } from '@graphql-tools/schema';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { resolvers } from './resolvers';
 
-### 4) Start Apollo Server
+const typeDefs = readFileSync(join(__dirname, 'schema.graphql'), 'utf8');
 
-Create `src/server.ts` and start Apollo using `startStandaloneServer`.
+const schema = makeExecutableSchema({
+  typeDefs,
+  resolvers,
+});
 
-The server will log a URL like:
+async function start() {
+  const server = new ApolloServer({
+    schema,
+    csrfPrevention: true,
+    cache: 'bounded',
+  });
 
-```text
-GraphQL ready at http://localhost:4000/
+  const port = Number(process.env.PORT) || 4000;
+
+  const { url } = await startStandaloneServer(server, {
+    listen: { port },
+  });
+
+  console.log(`GraphQL ready at ${url}`);
+}
+
+start().catch((err) => {
+  console.error('Failed to start Apollo Server', err);
+  process.exit(1);
+});
 ```
 
-Keep that URL in mind, because the Angular client must point `DataManager.url` to the GraphQL endpoint.
+## Step-by-Step Client Setup (Angular + GraphQLAdaptor)
 
-### 5) Run the server
+### Most important part – DataManager configuration:
 
-```bash
-npm start
+```ts
+    this.expenseManager = new DataManager({
+      crossDomain: true,
+      url: "http://localhost:4000/",
+      adaptor: new GraphQLAdaptor({
+        response: {
+          result: "expenses.result",
+          count: "expenses.count",
+        },
+        query: `
+          query expenses($datamanager: DataManager) {
+            expenses(datamanager: $datamanager) {
+              count
+              result {
+                expenseId
+                employeeName
+                employeeEmail
+                employeeAvatarUrl
+                department
+                category
+                description
+                receiptUrl
+                amount
+                taxPct
+                totalAmount
+                ExpenseDate
+                paymentMethod
+                currency
+                reimbursementStatus
+                isPolicyCompliant
+                tags
+              }
+            }
+          }
+        `,
+        getMutation: (action: string) => {
+          if (action === "insert") {
+            return `
+              mutation addExpense($value: ExpenseInput!) {
+                addExpense(value: $value) {
+                  expenseId
+                }
+              }
+            `;
+          }
+          if (action === "update") {
+            return `
+              mutation updateExpense($key: ID!, $keyColumn: String, $value: ExpenseInput!) {
+                updateExpense(key: $key, keyColumn: $keyColumn, value: $value) {
+                  expenseId
+                }
+              }
+            `;
+          }
+          return `
+            mutation deleteExpense($key: ID!, $keyColumn: String, $value: ExpenseInput) {
+              deleteExpense(key: $key, keyColumn: $keyColumn, value: $value)
+            }
+          `;
+        },
+      }),
+    });
 ```
 
-## Create the client from scratch
-
-This section explains how to create an Angular app that binds Syncfusion Grid to GraphQL using `GraphQLAdaptor`.
-
-### 1) Create an Angular app
-
-From a parent folder:
+### 1. Create Angular App:
 
 ```bash
 ng new client --standalone --style=css
 cd client
 ```
-
-### 2) Install Syncfusion packages
-
-Install packages:
-
+### 2. Install Syncfusion Packages:
 ```bash
-npm install \
-	@syncfusion/ej2-base \
-	@syncfusion/ej2-data \
-	@syncfusion/ej2-angular-base \
-	@syncfusion/ej2-grids @syncfusion/ej2-angular-grids \
-	@syncfusion/ej2-buttons @syncfusion/ej2-angular-buttons \
-	@syncfusion/ej2-inputs @syncfusion/ej2-angular-inputs \
-	@syncfusion/ej2-dropdowns @syncfusion/ej2-angular-dropdowns \
-	@syncfusion/ej2-calendars @syncfusion/ej2-angular-calendars \
-	@syncfusion/ej2-navigations @syncfusion/ej2-angular-navigations \
-	@syncfusion/ej2-popups @syncfusion/ej2-angular-popups \
-	@syncfusion/ej2-splitbuttons @syncfusion/ej2-angular-splitbuttons \
-	@syncfusion/ej2-notifications @syncfusion/ej2-angular-notifications
+npm install @syncfusion/ej2-angular-grids @syncfusion/ej2-data @syncfusion/ej2-base @syncfusion/ej2-angular-buttons @syncfusion/ej2-angular-inputs @syncfusion/ej2-angular-dropdowns @syncfusion/ej2-angular-calendars @syncfusion/ej2-angular-navigations @syncfusion/ej2-angular-popups
 ```
-
-### 3) Add Syncfusion theme styles
-
-Import Syncfusion styles from `src/styles.css` using `@import`.
-
-Example (Material theme):
-
+### 3. Add Styles (src/styles.css):
 ```css
-@import '../node_modules/@syncfusion/ej2-base/styles/material.css';
-@import '../node_modules/@syncfusion/ej2-buttons/styles/material.css';
-@import '../node_modules/@syncfusion/ej2-calendars/styles/material.css';
-@import '../node_modules/@syncfusion/ej2-dropdowns/styles/material.css';
-@import '../node_modules/@syncfusion/ej2-inputs/styles/material.css';
+@import '../node_modules/@syncfusion/ej2-base/styles/material.css';  
+@import '../node_modules/@syncfusion/ej2-buttons/styles/material.css';  
+@import '../node_modules/@syncfusion/ej2-calendars/styles/material.css';  
+@import '../node_modules/@syncfusion/ej2-dropdowns/styles/material.css';  
+@import '../node_modules/@syncfusion/ej2-inputs/styles/material.css';  
 @import '../node_modules/@syncfusion/ej2-navigations/styles/material.css';
 @import '../node_modules/@syncfusion/ej2-popups/styles/material.css';
 @import '../node_modules/@syncfusion/ej2-splitbuttons/styles/material.css';
 @import '../node_modules/@syncfusion/ej2-notifications/styles/material.css';
 @import '../node_modules/@syncfusion/ej2-angular-grids/styles/material.css';
+/* Add imports for other packages */
 ```
-
-> Alternative: you can also add these CSS files under the `styles` array in `angular.json` instead of using `@import`.
-
-### 4) Register your Syncfusion license
-
-In `src/main.ts`:
-
+### 4. Register License (src/main.ts):
 ```ts
 import { registerLicense } from '@syncfusion/ej2-base';
-
-registerLicense('YOUR SYNCFUSION LICENSE KEY');
+registerLicense('YOUR_LICENSE_KEY');
 ```
-
-### 5) Create the Grid + DataManager wiring
-
-Create a `DataManager` pointing to the GraphQL endpoint and configure `GraphQLAdaptor`:
-
+### 5. Create Grid Component (src/app/components/expense-grid/expense-grid.component.ts):
 ```ts
-this.expenseManager = new DataManager({
-	url: 'http://localhost:4000/',
-	adaptor: new GraphQLAdaptor({
-		response: {
-			result: 'expenses.result',
-			count: 'expenses.count'
-		},
-		query: `
-			query expenses($datamanager: DataManager) {
-				expenses(datamanager: $datamanager) {
-					count
-					result {
-						expenseId
-						employeeName
-						employeeEmail
-						employeeAvatarUrl
-						department
-						category
-						description
-						receiptUrl
-						amount
-						taxPct
-						totalAmount
-						ExpenseDate
-						paymentMethod
-						currency
-						reimbursementStatus
-						isPolicyCompliant
-						tags
-					}
-				}
-			}
-		`,
-		getMutation: (action: string) => {
-			if (action === 'insert') {
-				return `
-					mutation addExpense($value: ExpenseInput!) {
-						addExpense(value: $value) { expenseId }
-					}
-				`;
-			}
-			if (action === 'update') {
-				return `
-					mutation updateExpense($key: ID!, $keyColumn: String, $value: ExpenseInput!) {
-						updateExpense(key: $key, keyColumn: $keyColumn, value: $value) { expenseId }
-					}
-				`;
-			}
-			return `
-				mutation deleteExpense($key: ID!, $keyColumn: String, $value: ExpenseInput) {
-					deleteExpense(key: $key, keyColumn: $keyColumn, value: $value)
-				}
-			`;
-		}
-	})
-});
+import { Component } from '@angular/core';
+import { DataManager, GraphQLAdaptor } from '@syncfusion/ej2-data';
+import { PageService, SortService, FilterService, ToolbarService, EditService } from '@syncfusion/ej2-angular-grids';
+
+@Component({
+  selector: 'app-expense-grid',
+  templateUrl: './expense-grid.component.html',
+  providers: [PageService, SortService, FilterService, ToolbarService, EditService]
+})
+export class ExpenseGridComponent {
+  public dataManager: DataManager = new DataManager({
+    url: 'http://localhost:4000/',
+    adaptor: new GraphQLAdaptor({
+      response: { result: 'expenses.result', count: 'expenses.count' },
+      query: `query GetExpenses($datamanager: DataManagerInput!) { expenses(datamanager: $datamanager) { result { expenseId employeeName amount category date } count } }`,
+      getMutation: (action) => {
+        if (action === 'insert') return `mutation AddExpense($value: ExpenseInput!) { addExpense(value: $value) { expenseId employeeName amount category date } }`;
+        if (action === 'update') return `mutation UpdateExpense($key: ID!, $keyColumn: String!, $value: ExpenseInput!) { updateExpense(key: $key, keyColumn: $keyColumn, value: $value) { expenseId employeeName amount category date } }`;
+        if (action === 'delete') return `mutation DeleteExpense($key: ID!, $keyColumn: String!) { deleteExpense(key: $key, keyColumn: $keyColumn) }`;
+        return '';
+      }
+    })
+  });
+
+  public editSettings = { allowEditing: true, allowAdding: true, allowDeleting: true, mode: 'Dialog' };
+  public pageSettings = { pageSize: 10 };
+  public filterSettings = { type: 'Excel' };
+  public toolbar = ['Add', 'Edit', 'Delete', 'Search'];
+}
 ```
-
-### 6) Define the Grid and enable data features
-
-Enable paging, filtering, sorting, searching, and grouping on the grid:
-
+### 6. Grid Template (expense-grid.component.html):
 ```html
-<ejs-grid
-  [dataSource]="expenseManager"
-  [height]="520"
-  [toolbar]="toolbar"
-  [allowPaging]="true"
-  [allowSorting]="true"
-  [allowFiltering]="true"
-  [allowGrouping]="true"
-  [allowTextWrap]="true"
-  [pageSettings]="pageSettings"
-  [filterSettings]="filterSettings"
-  [searchSettings]="searchSettings"
-  [groupSettings]="groupSettings"
-  [editSettings]="editSettings"
-  clipMode="EllipsisWithTooltip"
-  (actionBegin)="actionBegin($event)"
-  (actionComplete)="actionComplete($event)"
->
-	<e-columns>
-		<e-column field="expenseId" headerText="Expense ID" isPrimaryKey="true"></e-column>
-		<e-column field="employeeName" headerText="Employee"></e-column>
-        . . . . .
-	</e-columns>
+<ejs-grid [dataSource]="dataManager" [allowPaging]="true" [allowSorting]="true" [allowFiltering]="true" [toolbar]="toolbar" [editSettings]="editSettings" [pageSettings]="pageSettings" [filterSettings]="filterSettings">
+  <e-columns>
+    <e-column field="expenseId" headerText="ID" isPrimaryKey="true"></e-column>
+    <e-column field="employeeName" headerText="Name"></e-column>
+    <e-column field="amount" headerText="Amount" format="C2"></e-column>
+    <e-column field="category" headerText="Category"></e-column>
+    <e-column field="date" headerText="Date" type="date" format="yMd"></e-column>
+  </e-columns>
 </ejs-grid>
 ```
 
-What each option does:
 
-- **Paging**: `allowPaging="true"` enables the pager UI. Control page size and page-size dropdown using `pageSettings`.
-- **Sorting**: `allowSorting="true"` enables sorting by clicking column headers. Sort descriptors are sent to the server through the DataManager payload.
-- **Filtering**: `allowFiltering="true"` enables column filtering UI. Control filter UI style using `filterSettings` (for example, Excel-style filtering).
-- **Searching**: use the toolbar `Search` item and set `searchSettings.fields` to control which fields participate in searches.
-- **Grouping**: `allowGrouping="true"` enables grouping. Use `groupSettings.showDropArea` to show the group drop area above the grid.
+## How to Run the Server and Client Application
+### Run the Server:
+- Run the below commands to install the depency packages of server and run the sevrer
+	```bash
+	cd server
+	npm install
+	npm start
+	```
+- Access at `http://localhost:4000/`.
 
-Configure feature settings in the component:
+### Run the Client:
+- Execute the below commands to install the depencies of client application and run it
+	```bash
+	cd client
+	npm install
+	npm start
+	```
+- Open http://localhost:4200/ in your browser.
+- Verify: Load data, page/sort/filter, add/edit/delete expenses.
 
-```ts
-public pageSettings = { pageSize: 20, pageSizes: true };
-public filterSettings = { type: 'Excel' };
-public searchSettings = {
-	fields: ['expenseId', 'employeeName', 'employeeEmail', 'department', 'category', 'paymentMethod', 'reimbursementStatus', 'tags']
-};
-public groupSettings = { showDropArea: true };
-```
 
-Provide the required Syncfusion services for those features:
+# Quick Reference for Syncfusion **React Grid** – Server Response Expectations
 
-```ts
-providers: [
-	PageService,
-	SortService,
-	FilterService,
-	GroupService,
-	SearchService,
-	ToolbarService,
-	EditService,
-	CommandColumnService,
-]
-```
+> A concise guide to structuring your server responses so the **Syncfusion React Grid** can page, sort, filter, virtualize, and mutate data correctly—without extra round-trips.
 
-### 7) Configure editing
+---
 
-Use dialog editing:
+## 🔎 Quick Reference
 
-- `editSettings = { allowEditing: true, allowAdding: true, allowDeleting: true, mode: 'Dialog' }`
-- Toolbar: `['Add','Edit','Delete','Search']`
+| Operation | **Required Response Format** | **Purpose / Importance** |
+|---|---|---|
+| **Read / Load** | `{ result: [/* current page only */], count: /* total */ }` | Enables true on-demand loading & correct pager |
+| **Insert (Create)** | **Full newly created record** | Grid adds row instantly without extra fetch |
+| **Update** | **Full updated record** | Grid refreshes row in place |
+| **Delete** | **Boolean** or **deleted identifier** | Grid removes row locally |
+---
+## FAQ
+**Q: Why can't I just return all data and set count = result.length?**\
+**A:** Paging would be completely broken, the grid would think there’s only one page because count equals the visible slice, not the total.
 
-And uses grid lifecycle events:
+**Q: Why do mutations need to return full objects?**\
+**A:** So the grid can immediately update the UI without making an additional GET request. This keeps interactions snappy and reduces load.
 
-- `actionBegin`: initializes dialog model and injects validated data on save
-- `actionComplete`: adds dialog validation rules and sizes the dialog
+**Q: Does this support virtual scrolling / infinite scroll?**\
+**A:** Yes. When enableVirtualization = true and the server always returns correct count for the current filter/sort. The grid fetches windows on demand.
 
-## Run the sample
+**Q: Can I use Apollo Client caching with GraphQLAdaptor?**\
+**A:** Not directly. For Apollo features (cache, links, auth), use a custom UrlAdaptor wired to Apollo Client instead of GraphQLAdaptor.
 
-### 1) Start the GraphQL server
-
-From the project root:
-
-```bash
-cd server
-npm install
-npm start
-```
-
-The server prints the GraphQL URL when it starts.
-
-### 2) Start the Angular client
-
-In a second terminal:
-
-```bash
-cd client
-npm install
-npm start
-```
-
-Open the Angular dev server URL (usually `http://localhost:4200`).
-
-### 3) Verify it works
-
-- Paging: use the pager
-- Sorting: click column headers
-- Filtering: use Excel/Menu/Checkbox filters (depending on column)
-- Search: use the toolbar search
-- CRUD: Add/Edit/Delete via the grid toolbar and dialog editing
+## Common Mistakes & How to Fix Them
+1. Returning count = result.length → Pager always shows only 1 page → Fix: Always return the total filtered count
+2. Mutation returns only ID → Added/edited row appears empty or broken → Fix: Return all fields displayed in the grid
+3. Wrong path in response property → "No records to display" error → Fix: Use exact match e.g. 'expenses.result', 'expenses.count'
+4. Complex filters don't work → Fix: Implement filtering on server using @syncfusion/ej2-data Query + Predicate

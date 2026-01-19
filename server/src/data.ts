@@ -1,8 +1,9 @@
+
 import { ExpenseRecord, ExpenseInput, AvatarEntry } from './types';
 import { v4 as uuid } from 'uuid';
 import avatarData from './avatars_base64.json';
 
-const FIRST_NAMES = ['Jane', 'Mark', 'Olivia', 'Ethan', 'Sophia', 'Liam', 'Ava', 'Noah', 'Mia', 'Lucas'];
+const FIRST_NAMES = ['Jane', 'Mark', 'Olivia', 'Ethan', 'Sophia', 'Liam', 'Adam', 'Noah', 'Mia', 'Lucas'];
 const LAST_NAMES = ['Smith', 'Johnson', 'Davis', 'Brown', 'Garcia', 'Miller', 'Wilson', 'Martinez', 'Anderson', 'Clark'];
 
 const DEPARTMENTS = ['Finance', 'HR & People', 'Engineering', 'Marketing', 'Sales', 'Operations'];
@@ -52,26 +53,21 @@ const CURRENCIES = ['USD - US Dollar', 'EUR - Euro', 'GBP - Pound', 'JPY - Yen']
 const STATUSES: ExpenseRecord['reimbursementStatus'][] = ['Submitted', 'Under Review', 'Approved', 'Paid', 'Rejected'];
 const TAG_OPTIONS = ['Urgent', 'Client-Billable', 'Non-Billable', 'Conference', 'Recurring', 'Capital Expense'];
 
+// --- Avatars (assumed 70 images) ---
 const AVATARS = (avatarData as AvatarEntry[]).map(({ Base64Data }) => `data:image/jpeg;base64,${Base64Data}`);
 
-function randomAvatarUrl(): string {
-  return pick(AVATARS);
-}
-
+// --- Helpers ---
 function pick<T>(list: T[]): T {
   return list[Math.floor(Math.random() * list.length)];
 }
-
 function randomTags(): string[] {
   const shuffled = [...TAG_OPTIONS].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.floor(Math.random() * 3)).sort();
 }
-
 function randomAmount(): number {
   const base = Math.random() * 1960 + 40; // 40 - 2000
   return Number(base.toFixed(2));
 }
-
 function randomTaxPct(): number {
   const pct = Math.random() * 0.1 + 0.02; // 2% - 12%
   return Number(pct.toFixed(4));
@@ -103,12 +99,58 @@ function randomDateInRangeUTC(startUtc: Date, endUtc: Date): string {
   return result.toISOString();
 }
 
+// --- New: Fixed employee roster, 1:1 with AVATARS ---
+type Employee = {
+  name: string;
+  email: string;
+  avatarUrl: string;
+  department: string;
+};
+
+const EMPLOYEE_COUNT = Math.min(
+  AVATARS.length,
+  FIRST_NAMES.length * LAST_NAMES.length // ensure we can create unique names
+);
+
+/**
+ * Build a deterministic roster of employees:
+ * - Exactly AVATARS.length employees (e.g., 70)
+ * - Each employee gets a unique (first,last) pair, email, department, and avatar
+ * - Department is assigned round-robin for consistency
+ */
+function buildEmployeeRoster(): Employee[] {
+  const roster: Employee[] = [];
+  let idx = 0;
+
+  outer: for (let f = 0; f < FIRST_NAMES.length; f++) {
+    for (let l = 0; l < LAST_NAMES.length; l++) {
+      if (idx >= EMPLOYEE_COUNT) break outer;
+      const first = FIRST_NAMES[f];
+      const last = LAST_NAMES[l];
+      roster.push({
+        name: `${first} ${last}`,
+        email: `${first}.${last}@example.com`.toLowerCase(),
+        avatarUrl: AVATARS[idx],
+        department: DEPARTMENTS[idx % DEPARTMENTS.length]
+      });
+      idx++;
+    }
+  }
+
+  return roster;
+}
+
+export const employees: Employee[] = buildEmployeeRoster();
+
+/**
+ * Generate expenses using ONLY the fixed employees roster.
+ * Each expense row pulls the employee's immutable name/email/avatar/department.
+ */
 function generateExpenses(count = 200): ExpenseRecord[] {
   const { startUtc, endUtc } = getReportingWindow();
 
   return Array.from({ length: count }).map((_, idx) => {
-    const first = pick(FIRST_NAMES);
-    const last = pick(LAST_NAMES);
+    const employee = pick(employees); // randomly pick among the 70 employees
     const amount = randomAmount();
     const taxPct = randomTaxPct();
     const category = pick(CATEGORIES);
@@ -116,10 +158,10 @@ function generateExpenses(count = 200): ExpenseRecord[] {
 
     return {
       expenseId: `EXP${202400 + idx}`,
-      employeeName: `${first} ${last}`,
-      employeeEmail: `${first}.${last}@example.com`.toLowerCase(),
-      employeeAvatarUrl: randomAvatarUrl(),
-      department: pick(DEPARTMENTS),
+      employeeName: employee.name,
+      employeeEmail: employee.email,
+      employeeAvatarUrl: employee.avatarUrl,
+      department: employee.department, // stable per employee
       category,
       description: pick(descriptionPool),
       amount,
@@ -137,7 +179,11 @@ function generateExpenses(count = 200): ExpenseRecord[] {
 
 export const expenses: ExpenseRecord[] = generateExpenses(2000);
 
+// --- CRUD (unchanged API) ---
 export function addExpense(value: ExpenseInput): ExpenseRecord {
+  // If the caller passes an employeeEmail that matches the roster,
+  // you can optionally enforce the stable department/avatar here.
+  // For now, keep existing behavior as requested.
   const expense: ExpenseRecord = { expenseId: uuid(), ...value };
   expenses.push(expense);
   return expense;
