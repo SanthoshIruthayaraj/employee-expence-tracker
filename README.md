@@ -29,7 +29,7 @@ The key to success in this integration lies in one fundamental rule:
 
 ## What is GraphQL?
 
-GraphQL is a modern query language for APIs that gives clients exactly the data they request — nothing more, nothing less.
+GraphQL is a modern query language for APIs that gives clients exactly the data they request nothing more, nothing less.
 
 ### Main advantages:
 
@@ -99,11 +99,11 @@ result = data for current screen/viewport only count = total number of records a
 - Dialog-based CRUD operations (Add, Edit, Delete)
 - Optimized for thousands to millions of records
   Sample Fields
-- expenseId
-- employeeName
-- amount
-- category
-- date
+  - expenseId
+  - employeeName
+  - amount
+  - category
+  - date
 
 ---
 
@@ -119,7 +119,7 @@ result = data for current screen/viewport only count = total number of records a
 
 ```text
 expense-tracker/
-├── server/							# GraphQL Backend
+├── server/                           # GraphQL Backend
 │   ├── src/
 │   │   ├── schema.graphql
 │   │   ├── resolvers.ts
@@ -128,13 +128,13 @@ expense-tracker/
 │   ├── tsconfig.json
 │   └── package.json
 │
-└── client/							# Angular Frontend
+└── client/                           # Angular Frontend
     ├── src/
     │   ├── app/
     │   │   ├── app.component.ts
     │   │   └── app.component.html
-    │   ├── styles.css				# Syncfusion theme imports
-    │   └── main.ts					# license registration
+    │   ├── styles.css                # Syncfusion theme imports
+    │   └── main.ts                   # license registration
     ├── angular.json
     └── package.json
 ```
@@ -225,11 +225,6 @@ type Expense {
   tags: [String!]!
 }
 
-type ExpenseResult {
-  result: [Expense!]!
-  count: Int!
-}
-
 input ExpenseInput {
   expenseId: ID
   employeeName: String
@@ -261,6 +256,11 @@ input DataManager {
   params: JSON
 }
 
+type ExpenseResult {
+  result: [Expense!]!
+  count: Int!
+}
+
 input SortInput {
   name: String!
   direction: String!
@@ -288,13 +288,10 @@ type Mutation {
 ### 6. Implement Resolvers (src/resolvers.ts):
 
 ```ts
-import {
-  DataManager as SfDataManager,
-  Query as SfQuery,
-} from "@syncfusion/ej2-data";
+import { DataManager, Query } from "@syncfusion/ej2-data";
 
 // Sample in-memory data (replace with DB)
-let expenses: any[] = [
+let expenses = [
   {
     expenseId: "1",
     employeeName: "John",
@@ -306,33 +303,40 @@ let expenses: any[] = [
 
 export const resolvers = {
   Query: {
-    expenses: (_, { datamanager }) => {
-      let data = [...expenses];
-      const query = new SfQuery();
+    expenses: (
+      _: unknown,
+      { datamanager }: { datamanager: DataStateChangeEventArgs }
+    ): { result: ExpenseRecord[]; count: number } => {
+      let data: ExpenseRecord[] = [...expenses];
+      const query = new Query();
 
-      // Apply filtering, sorting, searching (implement details)
+      performFiltering(query, datamanager);
+      performSearching(query, datamanager);
+      performSorting(query, datamanager);
 
-      data = new SfDataManager(data).executeLocal(query) as any[];
+      data = new DataManager(data).executeLocal(query) as ExpenseRecord[];
       const count = data.length;
-      data = data.slice(
-        datamanager.skip || 0,
-        (datamanager.skip || 0) + (datamanager.take || data.length),
-      );
+
+      data = performPaging(data, datamanager);
+
       return { result: data, count };
     },
   },
   Mutation: {
-    addExpense: (_: unknown, { value }: any) => {
+    addExpense: (_: unknown, { value }: AddExpenseArgs) => {
       const normalized = normalizeExpenseInput(value);
       return addExpense(normalized as ExpenseInput);
     },
-    updateExpense: (_: unknown, { key, value }: any) => {
+
+    updateExpense: (_: unknown, { key, value }: UpdateExpenseArgs) => {
       const existing = expenses.find((item) => item.expenseId === key);
-      if (!existing) throw new Error("Expense not found");
+      if (!existing) throw new Error('Expense not found');
       const normalized = normalizeExpenseInput(value, existing);
       return updateExpense(key, normalized) as ExpenseRecord;
     },
-    deleteExpense: (_: unknown, { key }: any) => removeExpense(key),
+
+    deleteExpense: (_: unknown, { key }: { key: string }) =>
+      removeExpense(key),
   },
 };
 ```
@@ -416,7 +420,7 @@ start().catch((err) => {
         getMutation: (action: string) => {
           if (action === "insert") {
             return `
-              mutation addExpense($value: ExpenseInput!) {
+              mutation addExpense($value: Expense!) {
                 addExpense(value: $value) {
                   expenseId
                 }
@@ -425,7 +429,7 @@ start().catch((err) => {
           }
           if (action === "update") {
             return `
-              mutation updateExpense($key: ID!, $keyColumn: String, $value: ExpenseInput!) {
+              mutation updateExpense($key: ID!, $keyColumn: String, $value: Expense!) {
                 updateExpense(key: $key, keyColumn: $keyColumn, value: $value) {
                   expenseId
                 }
@@ -433,7 +437,7 @@ start().catch((err) => {
             `;
           }
           return `
-            mutation deleteExpense($key: ID!, $keyColumn: String, $value: ExpenseInput) {
+            mutation deleteExpense($key: ID!, $keyColumn: String, $value: Expense) {
               deleteExpense(key: $key, keyColumn: $keyColumn, value: $value)
             }
           `;
@@ -464,7 +468,6 @@ npm install @syncfusion/ej2-angular-grids @syncfusion/ej2-data @syncfusion/ej2-b
 @import '../node_modules/@syncfusion/ej2-splitbuttons/styles/material.css';
 @import '../node_modules/@syncfusion/ej2-notifications/styles/material.css';
 @import '../node_modules/@syncfusion/ej2-angular-grids/styles/material.css';
-/* Add imports for other packages */
 ```
 ### 4. Register License (src/main.ts):
 ```ts
@@ -534,13 +537,13 @@ export class ExpenseGridComponent {
 	npm install
 	npm start
 	```
-- Open http://localhost:4200/ in your browser.
+- Open `http://localhost:4200/` in your browser.
 - Verify: Load data, page/sort/filter, add/edit/delete expenses.
 
 
 # Quick Reference for Syncfusion **React Grid** – Server Response Expectations
 
-> A concise guide to structuring your server responses so the **Syncfusion React Grid** can page, sort, filter, virtualize, and mutate data correctly—without extra round-trips.
+> A concise guide to structuring your server responses so the **Syncfusion React Grid** can page, sort, filter, virtualize, and mutate data correctly without extra round trips.
 
 ---
 
